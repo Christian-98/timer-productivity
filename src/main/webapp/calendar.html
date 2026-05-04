@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendario Appuntamenti</title>
+<style>
+body{margin:0;font-family:Arial,sans-serif;background:linear-gradient(135deg,#0f172a,#1e293b);color:#fff;min-height:100vh;padding:30px}
+.container{max-width:1100px;margin:auto;background:rgba(255,255,255,.08);backdrop-filter:blur(14px);border-radius:24px;padding:25px;box-shadow:0 20px 50px rgba(0,0,0,.35)}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+h1{margin:0}.nav a{color:#fff;text-decoration:none;margin-left:15px;font-weight:bold}
+.header{display:flex;justify-content:space-between;align-items:center;margin:20px 0}
+button{border:none;padding:10px 18px;border-radius:12px;cursor:pointer;font-weight:bold}
+.btn{background:#3b82f6;color:#fff}.btn2{background:#22c55e;color:#fff}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
+.dayname,.day{background:rgba(255,255,255,.06);padding:12px;border-radius:14px;min-height:95px}
+.dayname{min-height:auto;text-align:center;font-weight:bold}
+.day{cursor:pointer;position:relative}
+.day:hover{background:rgba(255,255,255,.12)}
+.num{font-weight:bold;margin-bottom:8px}
+.event{font-size:.8rem;padding:4px 6px;border-radius:8px;background:#22c55e;margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;justify-content:center;align-items:center}
+.box{background:#fff;color:#111;padding:24px;border-radius:18px;width:92%;max-width:420px}
+input{width:100%;padding:10px;margin-top:10px;border-radius:10px;border:1px solid #ccc}
+.actions{display:flex;gap:10px;justify-content:flex-end;margin-top:15px}
+.small{opacity:.8}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="topbar">
+<h1>📅 Calendario</h1>
+<div class="nav">
+<a href="index.html">Dashboard</a>
+<a href="calendar.html">Calendario</a>
+</div>
+</div>
+<div class="header">
+<button class="btn" onclick="changeMonth(-1)">◀</button>
+<h2 id="monthLabel"></h2>
+<button class="btn" onclick="changeMonth(1)">▶</button>
+</div>
+<div class="grid" id="calendar"></div>
+<p class="small">Clicca su un giorno per aggiungere appuntamenti</p>
+</div>
+<div class="modal" id="modal">
+<div class="box">
+<h3>Nuovo appuntamento</h3>
+<div id="selectedDate"></div>
+<input id="eventTitle" placeholder="Titolo appuntamento">
+<input id="eventTime" type="time">
+<div class="actions">
+<button onclick="closeModal()">Chiudi</button>
+<button class="btn2" onclick="saveEvent()">Salva</button>
+</div>
+</div>
+</div>
+<script>
+let current=new Date();
+let selectedKey='';
+function events(){return JSON.parse(localStorage.getItem('events')||'{}')}
+function store(data){localStorage.setItem('events',JSON.stringify(data))}
+function render(){const cal=document.getElementById('calendar');cal.innerHTML='';const names=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];names.forEach(n=>cal.innerHTML+=`<div class='dayname'>${n}</div>`);const y=current.getFullYear(),m=current.getMonth();document.getElementById('monthLabel').innerText=current.toLocaleDateString('it-IT',{month:'long',year:'numeric'});let first=new Date(y,m,1);let start=(first.getDay()+6)%7;let days=new Date(y,m+1,0).getDate();for(let i=0;i<start;i++)cal.innerHTML+='<div></div>';const ev=events();for(let d=1;d<=days;d++){let key=`${y}-${m+1}-${d}`;let html=`<div class='day' onclick="openModal('${key}')"><div class='num'>${d}</div>`;(ev[key]||[]).forEach(e=>html+=`<div class='event'>${e.time} ${e.title}</div>`);html+='</div>';cal.innerHTML+=html;}}
+function changeMonth(v){current.setMonth(current.getMonth()+v);render()}
+function openModal(key){selectedKey=key;document.getElementById('selectedDate').innerText='Data: '+key;document.getElementById('modal').style.display='flex'}
+function closeModal(){document.getElementById('modal').style.display='none';document.getElementById('eventTitle').value='';document.getElementById('eventTime').value=''}
+function saveEvent(){let title=document.getElementById('eventTitle').value.trim();let time=document.getElementById('eventTime').value;if(!title)return;let ev=events();if(!ev[selectedKey])ev[selectedKey]=[];ev[selectedKey].push({title,time});store(ev);closeModal();render();}
+render();
+</script>
+</body>
+</html>

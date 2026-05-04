@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Statistical timer</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body{
+margin:0;
+font-family:Arial,Helvetica,sans-serif;
+background:linear-gradient(135deg,#0f172a,#1e293b);
+color:white;
+display:flex;
+justify-content:center;
+align-items:flex-start;
+min-height:100vh;
+padding:30px 0;
+}
+
+.container{
+width:95%;
+max-width:1200px;
+background:rgba(255,255,255,.08);
+backdrop-filter:blur(15px);
+padding:30px;
+border-radius:24px;
+box-shadow:0 20px 60px rgba(0,0,0,.35);
+}
+
+.topbar{
+display:flex;
+justify-content:space-between;
+align-items:center;
+gap:15px;
+flex-wrap:wrap;
+margin-bottom:25px;
+}
+
+h1{
+margin:0;
+font-size:2.2rem;
+}
+
+.live{
+font-size:1rem;
+margin-top:8px;
+font-weight:bold;
+color:#22c55e;
+}
+
+button{
+border:none;
+padding:12px 18px;
+border-radius:12px;
+font-weight:bold;
+cursor:pointer;
+transition:.2s;
+}
+
+button:hover{
+transform:translateY(-2px);
+}
+
+.primary{background:#6366f1;color:white;}
+.green{background:#22c55e;color:white;}
+.orange{background:#f59e0b;color:#111;}
+
+.grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+gap:15px;
+margin-bottom:25px;
+}
+
+.card{
+background:rgba(255,255,255,.06);
+padding:20px;
+border-radius:18px;
+}
+
+.label{
+font-size:.95rem;
+opacity:.8;
+margin-bottom:10px;
+}
+
+.metric{
+font-size:2rem;
+font-weight:bold;
+}
+
+.filters{
+display:flex;
+gap:10px;
+flex-wrap:wrap;
+margin-bottom:25px;
+}
+
+input{
+padding:12px;
+border:none;
+border-radius:12px;
+font-size:1rem;
+}
+
+.section{
+margin-top:25px;
+}
+
+.section h2{
+margin-bottom:15px;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:15px;
+overflow:hidden;
+border-radius:16px;
+background:rgba(255,255,255,.06);
+}
+
+th,td{
+padding:14px;
+border-bottom:1px solid rgba(255,255,255,.08);
+text-align:left;
+font-size:.95rem;
+}
+
+th{
+background:rgba(255,255,255,.08);
+}
+
+canvas{
+background:rgba(255,255,255,.04);
+border-radius:18px;
+padding:10px;
+}
+
+.empty{
+padding:20px;
+text-align:center;
+opacity:.7;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<!-- HEADER -->
+<div class="topbar">
+
+<div>
+<h1>📊 Timer Statistics</h1>
+<div class="live">⏱ Timer Live: <span id="liveTimer">00:00:00</span></div>
+</div>
+
+<button class="primary" onclick="location.href='index.html'">
+⏱ ← Go back to the Timer
+</button>
+
+</div>
+
+<!-- KPI -->
+<div class="grid">
+
+<div class="card">
+<div class="label">Total Sessions</div>
+<div class="metric" id="totalSessions">0</div>
+</div>
+
+<div class="card">
+<div class="label">Total Time</div>
+<div class="metric" id="totalTime">00:00:00</div>
+</div>
+
+<div class="card">
+<div class="label">Average Session</div>
+<div class="metric" id="avgTime">00:00:00</div>
+</div>
+
+<div class="card">
+<div class="label">Best Session</div>
+<div class="metric" id="bestTime">00:00:00</div>
+</div>
+
+</div>
+
+<!-- FILTRI -->
+<div class="filters">
+
+<input type="date" id="fromDate">
+<input type="date" id="toDate">
+
+<button class="green" onclick="quickDays(7)">Last 7 Days</button>
+<button class="orange" onclick="quickDays(30)">Last 30 Days</button>
+<button class="primary" onclick="loadFiltered()">Filter</button>
+
+</div>
+
+<!-- GRAFICO -->
+<div class="section">
+<h2>📈 Session progress</h2>
+<canvas id="chart" height="100"></canvas>
+</div>
+
+<!-- TABELLA -->
+<div class="section">
+<h2>🗂 Sessions of the Period</h2>
+
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Name</th>
+<th>Duration</th>
+<th>Note</th>
+<th>State</th>
+</tr>
+</thead>
+
+<tbody id="sessions"></tbody>
+</table>
+
+</div>
+
+</div>
+
+<script>
+
+const API='/timer-app/resources/statisticsAction';
+
+let chart=null;
+
+/* ===========================
+   FORMAT SECONDI
+=========================== */
+function format(sec){
+
+sec = Number(sec)||0;
+
+const h = String(Math.floor(sec/3600)).padStart(2,'0');
+const m = String(Math.floor((sec%3600)/60)).padStart(2,'0');
+const s = String(sec%60).padStart(2,'0');
+
+return `${h}:${m}:${s}`;
+}
+
+/* ===========================
+   DASHBOARD
+=========================== */
+function renderDashboard(data){
+
+document.getElementById('totalSessions').innerText =
+data.totalSessions || 0;
+
+document.getElementById('totalTime').innerText =
+format(data.totalSeconds);
+
+document.getElementById('avgTime').innerText =
+format(data.averageSeconds);
+
+document.getElementById('bestTime').innerText =
+format(data.bestSessionSeconds);
+}
+
+/* ===========================
+   SESSIONI
+=========================== */
+function renderSessions(rows){
+
+const body = document.getElementById('sessions');
+
+if(!rows || rows.length===0){
+
+body.innerHTML =
+`<tr><td colspan="5" class="empty">No sessions found</td></tr>`;
+
+return;
+}
+
+let html='';
+
+rows.forEach(r=>{
+
+html += `
+<tr>
+<td>${r.timerId}</td>
+<td>${r.name || ''}</td>
+<td>${format(r.durationSeconds)}</td>
+<td>${r.note || ''}</td>
+<td>${r.status && r.status !== 'ACTIVE' ? 'Completato' : 'Attivo'}</td>
+</tr>
+`;
+
+});
+
+body.innerHTML = html;
+}
+
+/* ===========================
+   GRAFICO
+=========================== */
+function renderChart(rows){
+
+const labels = [];
+const values = [];
+
+rows.forEach(r=>{
+labels.push(r.name || ('#'+r.timerId));
+values.push(Number(r.durationSeconds)||0);
+});
+
+const ctx = document.getElementById('chart');
+
+if(chart){
+chart.destroy();
+}
+
+chart = new Chart(ctx,{
+type:'bar',
+data:{
+labels:labels,
+datasets:[{
+label:'Seconds',
+data:values
+}]
+},
+options:{
+responsive:true,
+
+plugins:{
+
+legend:{
+labels:{color:'white'}
+},
+
+tooltip:{
+callbacks:{
+label:function(context){
+return format(context.parsed.y);
+}
+}
+}
+
+},
+
+scales:{
+x:{
+ticks:{color:'white'}
+},
+y:{
+ticks:{
+color:'white',
+callback:function(value){
+return format(value);
+}
+}
+}
+}
+}
+});
+}
+
+/* ===========================
+   LOAD DEFAULT
+=========================== */
+async function loadDashboardDefault(){
+
+try{
+
+const res = await fetch(API+'/stats/dashboard',{
+method:'POST'
+});
+
+const json = await res.json();
+
+const data = json.data || {};
+
+renderDashboard(data);
+
+}catch(e){
+console.log(e);
+}
+
+}
+
+/* ===========================
+   LOAD DEFAULT SESSIONI
+=========================== */
+async function loadDefaultSessions(){
+
+try{
+
+const res = await fetch(API+'/stats/summary',{
+method:'POST'
+});
+
+const json = await res.json();
+
+const rows = json.data || [];
+
+renderSessions(rows.slice(-10).reverse());
+renderChart(rows.slice(-10).reverse());
+
+}catch(e){
+console.log(e);
+}
+
+}
+
+/* ===========================
+   FILTRO PERIODO
+=========================== */
+async function loadFiltered(){
+
+const from = document.getElementById('fromDate').value;
+const to   = document.getElementById('toDate').value;
+
+if(!from || !to){
+alert("Seleziona data inizio e fine");
+return;
+}
+
+try{
+
+const res = await fetch(API+'/stats/byPeriod',{
+method:'POST',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({
+data:{
+startDate:`${from}T00:00:00`,
+endDate:`${to}T23:59:59`
+}
+})
+});
+
+const json = await res.json();
+
+const data = json.data || {};
+
+renderDashboard(data);
+renderSessions(data.sessions || []);
+renderChart(data.sessions || []);
+
+}catch(e){
+console.log(e);
+}
+
+}
+
+/* ===========================
+   QUICK FILTER
+=========================== */
+function quickDays(days){
+
+const to = new Date();
+const from = new Date(Date.now() - (days*86400000));
+
+document.getElementById('fromDate').value =
+from.toISOString().slice(0,10);
+
+document.getElementById('toDate').value =
+to.toISOString().slice(0,10);
+
+loadFiltered();
+}
+
+/* ===========================
+   TIMER LIVE DA LOCALSTORAGE
+=========================== */
+function liveTimer(){
+
+const running = localStorage.getItem("timerRunning");
+const base = Number(localStorage.getItem("liveBaseSeconds")) || 0;
+const start = localStorage.getItem("liveStartedAtMs");
+
+if(running==="true" && start){
+
+const elapsed =
+Math.floor((Date.now()-Number(start))/1000);
+
+document.getElementById("liveTimer").innerText =
+format(base + elapsed);
+
+}else{
+
+document.getElementById("liveTimer").innerText =
+format(base);
+
+}
+
+}
+
+setInterval(liveTimer,1000);
+
+/* ===========================
+   INIT
+=========================== */
+loadDashboardDefault();
+loadDefaultSessions();
+liveTimer();
+
+</script>
+
+</body>
+</html>

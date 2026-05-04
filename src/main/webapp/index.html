@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Timer Productivity</title>
+
+<style>
+body{
+margin:0;
+font-family:Arial,Helvetica,sans-serif;
+background:linear-gradient(135deg,#0f172a,#1e293b);
+color:white;
+display:flex;
+justify-content:center;
+align-items:center;
+min-height:100vh;
+}
+
+.container{
+width:95%;
+max-width:950px;
+background:rgba(255,255,255,.08);
+backdrop-filter:blur(15px);
+padding:30px;
+border-radius:24px;
+box-shadow:0 20px 60px rgba(0,0,0,.35);
+}
+
+h1{
+text-align:center;
+margin:0;
+font-size:2.2rem;
+}
+
+.status{
+text-align:center;
+font-size:4rem;
+font-weight:bold;
+margin:25px 0;
+letter-spacing:2px;
+}
+
+.controls{
+display:flex;
+gap:10px;
+justify-content:center;
+flex-wrap:wrap;
+margin-bottom:20px;
+}
+
+button{
+border:none;
+padding:12px 18px;
+border-radius:12px;
+font-weight:bold;
+cursor:pointer;
+transition:.2s;
+}
+
+button:hover{
+transform:translateY(-2px);
+}
+
+.topbar{
+display:flex;
+justify-content:space-between;
+align-items:center;
+margin-bottom:20px;
+flex-wrap:wrap;
+gap:10px;
+}
+
+.nav-btn{
+background:linear-gradient(135deg,#6366f1,#4f46e5);
+color:white;
+padding:10px 16px;
+border-radius:12px;
+font-weight:bold;
+display:flex;
+align-items:center;
+gap:6px;
+}
+
+.nav-btn:hover{
+transform:translateY(-2px) scale(1.03);
+box-shadow:0 10px 20px rgba(0,0,0,.3);
+}
+
+.start{background:#22c55e;color:white;}
+.stop{background:#ef4444;color:white;}
+.resume{background:#f59e0b;color:white;}
+.end{background:#6366f1;color:white;}
+.delete{background:#ef4444;color:white;}
+.note{background:#0ea5e9;color:white;}
+
+input{
+width:100%;
+padding:12px;
+border:none;
+border-radius:12px;
+margin-top:10px;
+font-size:1rem;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:20px;
+overflow:hidden;
+border-radius:16px;
+background:rgba(255,255,255,.06);
+}
+
+th,td{
+padding:14px;
+border-bottom:1px solid rgba(255,255,255,.08);
+text-align:left;
+}
+
+th{
+background:rgba(255,255,255,.08);
+}
+
+.badge{
+padding:5px 10px;
+border-radius:999px;
+font-size:.8rem;
+font-weight:bold;
+}
+
+.done{
+background:#16a34a;
+}
+
+.open{
+background:#f59e0b;
+color:#111;
+}
+
+.total{
+margin-top:15px;
+text-align:right;
+font-size:1.1rem;
+font-weight:bold;
+}
+
+.actions{
+display:flex;
+gap:8px;
+flex-wrap:wrap;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="topbar">
+
+<h1>⏱ Timer Productivity</h1>
+
+<button class="nav-btn" onclick="location.href='statistics.html'">
+📊 → Go to the Statistics
+</button>
+
+</div>
+
+<div class="status" id="status">00:00:00</div>
+
+<div class="controls">
+<button class="start" onclick="startTimer()">START</button>
+<button class="stop" onclick="stopTimer()">STOP</button>
+<button class="resume" onclick="resumeTimer()">RESUME</button>
+<button class="end" onclick="endTimer()">END</button>
+</div>
+
+<label>Activity name</label>
+<input id="activity" placeholder="Es: Java Study / Work / Sports">
+
+<h2 style="margin-top:25px;">Session History</h2>
+
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Duration</th>
+<th>State</th>
+<th>Action</th>
+</tr>
+</thead>
+
+<tbody id="sessions"></tbody>
+</table>
+
+<div class="total" id="total">Total: 00:00:00</div>
+
+</div>
+
+<script>
+
+const base='/timer-app/resources/timerAction';
+
+/* ==================================
+   Variabili globali timer
+================================== */
+let currentId=null;
+let running=false;
+let interval=null;
+let liveBaseSeconds=0;
+let liveStartedAtMs=null;
+
+/* ==================================
+   Format secondi -> HH:MM:SS
+================================== */
+function format(sec){
+
+sec = Number(sec) || 0;
+
+const h=String(Math.floor(sec/3600)).padStart(2,'0');
+const m=String(Math.floor((sec%3600)/60)).padStart(2,'0');
+const s=String(sec%60).padStart(2,'0');
+
+return `${h}:${m}:${s}`;
+}
+
+/* ==================================
+   LOCAL STORAGE
+   Salva stato timer
+================================== */
+function saveTimerState(){
+
+localStorage.setItem("currentTimerId", currentId || "");
+localStorage.setItem("timerRunning", running);
+localStorage.setItem("liveBaseSeconds", liveBaseSeconds);
+localStorage.setItem("liveStartedAtMs", liveStartedAtMs || "");
+
+}
+
+/* ==================================
+   Ripristino stato timer
+================================== */
+function restoreTimerState(){
+
+const savedId = localStorage.getItem("currentTimerId");
+const savedRunning = localStorage.getItem("timerRunning");
+const savedBase = localStorage.getItem("liveBaseSeconds");
+const savedStart = localStorage.getItem("liveStartedAtMs");
+
+if(savedId){
+
+currentId = Number(savedId);
+running = (savedRunning === "true");
+liveBaseSeconds = Number(savedBase) || 0;
+liveStartedAtMs = savedStart ? Number(savedStart) : null;
+
+renderLive();
+
+if(running){
+startLive();
+}
+
+}
+
+}
+
+/* ==================================
+   Pulizia localStorage
+================================== */
+function clearTimerState(){
+
+localStorage.removeItem("currentTimerId");
+localStorage.removeItem("timerRunning");
+localStorage.removeItem("liveBaseSeconds");
+localStorage.removeItem("liveStartedAtMs");
+
+}
+
+/* ==================================
+   Timer live
+================================== */
+function getDisplayedSeconds(){
+
+const elapsed = running && liveStartedAtMs!==null
+? Math.floor((Date.now()-liveStartedAtMs)/1000)
+: 0;
+
+return liveBaseSeconds + elapsed;
+}
+
+function renderLive(){
+
+document.getElementById("status").innerText =
+format(getDisplayedSeconds());
+
+}
+
+function startLive(){
+
+clearInterval(interval);
+
+renderLive();
+
+interval=setInterval(()=>{
+renderLive();
+},1000);
+
+}
+
+/* ==================================
+   START
+================================== */
+async function startTimer(){
+
+const nome=document.getElementById("activity").value || "Attività";
+
+const res=await fetch(base+'/session/start',{
+method:'POST',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({
+data:{
+name:nome
+}
+})
+});
+
+const json=await res.json();
+
+if(!res.ok || !json.data){
+alert("Errore avvio timer");
+return;
+}
+
+currentId=json.data.id;
+running=true;
+liveBaseSeconds=0;
+liveStartedAtMs=Date.now();
+
+saveTimerState();
+
+startLive();
+loadSessions();
+}
+
+/* ==================================
+   STOP
+================================== */
+async function stopTimer(){
+
+if(!currentId)return;
+
+await fetch(`${base}/session/${currentId}/stop`,{
+method:'POST'
+});
+
+liveBaseSeconds=getDisplayedSeconds();
+liveStartedAtMs=null;
+running=false;
+
+saveTimerState();
+
+renderLive();
+loadSessions();
+}
+
+/* ==================================
+   RESUME
+================================== */
+async function resumeTimer(){
+
+if(!currentId)return;
+
+await fetch(`${base}/session/${currentId}/resume`,{
+method:'POST'
+});
+
+running=true;
+liveStartedAtMs=Date.now();
+
+saveTimerState();
+
+startLive();
+loadSessions();
+}
+
+/* ==================================
+   END
+================================== */
+async function endTimer(){
+
+if(!currentId)return;
+
+await fetch(`${base}/session/${currentId}/end`,{
+method:'POST'
+});
+
+clearInterval(interval);
+
+running=false;
+currentId=null;
+liveBaseSeconds=0;
+liveStartedAtMs=null;
+
+clearTimerState();
+
+renderLive();
+loadSessions();
+}
+
+/* ==================================
+   DELETE
+================================== */
+async function deleteTimer(id){
+
+if(!confirm("Eliminare questa sessione?")) return;
+
+await fetch(`${base}/session/${id}/delete`,{
+method:'POST'
+});
+
+if(currentId==id){
+
+clearInterval(interval);
+
+running=false;
+currentId=null;
+liveBaseSeconds=0;
+liveStartedAtMs=null;
+
+clearTimerState();
+
+renderLive();
+}
+
+loadSessions();
+}
+
+/* ==================================
+   AGGIUNGI NOTA
+================================== */
+async function addNote(id){
+
+const note = prompt("Inserisci una nota:");
+
+if(note === null) return;
+
+if(note.trim() === ""){
+alert("Nota vuota");
+return;
+}
+
+await fetch(`${base}/session/${id}/addNote`,{
+method:'POST',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({
+data:note
+})
+});
+
+alert("Nota salvata");
+}
+
+/* ==================================
+   Caricamento sessioni
+================================== */
+async function loadSessions(){
+
+const res=await fetch(base+'/all');
+const json=await res.json();
+
+const rows=json.data || [];
+
+let html='';
+let total=0;
+
+rows.forEach(r=>{
+
+const durata = Number(r.duration_seconds) || 0;
+
+total += durata;
+
+let badge='open';
+let text='Attivo';
+
+if(r.completed && r.completed !== 'ACTIVE'){
+badge='done';
+text='Completato';
+}
+
+html+=`
+<tr>
+<td>${r.name || ''}</td>
+<td>${format(durata)}</td>
+<td><span class="badge ${badge}">${text}</span></td>
+<td>
+<div class="actions">
+<button class="note" onclick="addNote(${r.id})">NOTE</button>
+<button class="delete" onclick="deleteTimer(${r.id})">DELETE</button>
+</div>
+</td>
+</tr>
+`;
+
+});
+
+document.getElementById("sessions").innerHTML=html;
+document.getElementById("total").innerText="Total: "+format(total);
+
+}
+
+/* ==================================
+   Refresh automatico
+================================== */
+setInterval(loadSessions,5000);
+
+/* ==================================
+   Avvio pagina
+================================== */
+restoreTimerState();
+loadSessions();
+
+</script>
+
+</body>
+</html>
